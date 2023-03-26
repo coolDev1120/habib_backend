@@ -11,6 +11,7 @@ const Info = require('./controllers/info')
 const Contact = require('./controllers/contact')
 const Asset = require('./controllers/asset')
 const Smtp = require('./controllers/SMTP')
+const Smtp2 = require('./controllers/SMTP2')
 
 
 const multer = require('multer')
@@ -35,6 +36,7 @@ router.get('/resetPassword', Authentication.resetPassword)
 
 // SMTP
 router.get('/sendEmail', Smtp.sendEmail)
+router.get('/receiveEmail', Smtp2.receiveEmail)
 
 // Jobs
 router.post('/getjobs', Job.getjobs)
