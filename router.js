@@ -35,8 +35,13 @@ router.post('/signup', Authentication.signup);
 router.get('/resetPassword', Authentication.resetPassword)
 
 // SMTP
-router.get('/sendEmail', Smtp.sendEmail)
-router.get('/receiveEmail', Smtp2.receiveEmail)
+router.post('/sendEmail', Smtp.sendEmail)
+router.post('/receiveEmail', Smtp2.receiveEmail)
+router.post('/detailEmail', Smtp2.detailEmail)
+router.post('/sendemailById', Smtp2.sendemailById)
+router.post('/updateImportant', Smtp2.updateImportant)
+router.post('/updateStarred', Smtp2.updateStarred)
+router.post('/deleteEmailByID', Smtp2.deleteEmailByID)
 
 // Jobs
 router.post('/getjobs', Job.getjobs)
