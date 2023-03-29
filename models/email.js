@@ -44,6 +44,12 @@ module.exports = (sequelize, Sequelize) => {
     reply: {
       type: Sequelize.DATE,
     },
+    accept: {
+      type: Sequelize.STRING,
+    },
+    parentID: {
+      type: Sequelize.INTEGER,
+    },
   })
   return Email;
 };

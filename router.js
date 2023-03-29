@@ -42,6 +42,9 @@ router.post('/sendemailById', Smtp2.sendemailById)
 router.post('/updateImportant', Smtp2.updateImportant)
 router.post('/updateStarred', Smtp2.updateStarred)
 router.post('/deleteEmailByID', Smtp2.deleteEmailByID)
+router.post('/acceptEmailById', Smtp2.acceptEmailById)
+router.post('/rejectEmailById', Smtp2.rejectEmailById)
+router.post('/getRepliedEmailById', Smtp2.getRepliedEmailById)
 
 // Jobs
 router.post('/getjobs', Job.getjobs)

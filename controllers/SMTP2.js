@@ -312,38 +312,72 @@ function getTwo() {
 
 exports.receiveEmail = async (req, res, next) => {
     var category = req.body.category;
+    var search = req.body.search;
+    if (!search || search == undefined) { search = ''; }
 
-    if (category == 'all') {
+    if (category == 'all' || category == 'inbox') {
+        var mails;
+
+
         await db.sequelize.query(
-            `select * from emails where category = 0 order by id asc`, { type: db.Sequelize.QueryTypes.SELECT })
+            `select * from emails 
+            where category = 0 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+            order by id asc limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
-                res.json({ data: result });
+                mails = result;
             });
-    } else if (category == 'inbox') {
         await db.sequelize.query(
-            `select * from emails where category = 0 order by id asc`, { type: db.Sequelize.QueryTypes.SELECT })
+            `select count(id) as cnt from emails 
+            where category = 0 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%')`, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
-                res.json({ data: result });
+                res.json({ data: mails, count: result[0].cnt });
             });
     } else if (category == 'sent') {
+        var mails;
         await db.sequelize.query(
-            `select * from emails where category = 1 order by id desc`, { type: db.Sequelize.QueryTypes.SELECT })
+            `select * from emails 
+            where category = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+            order by id desc limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
-                res.json({ data: result });
+                mails = result;
+            });
+        await db.sequelize.query(
+            `select count(id) as cnt from emails 
+            where category = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') `, { type: db.Sequelize.QueryTypes.SELECT })
+            .then((result) => {
+                res.json({ data: mails, count: result[0].cnt });
             });
     }
     else if (category == 'important') {
+        var mails;
         await db.sequelize.query(
-            `select * from emails where category = 0 and isImportant = 1 order by id desc`, { type: db.Sequelize.QueryTypes.SELECT })
+            `select * from emails 
+            where isImportant = 1  AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+            order by id desc limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
-                res.json({ data: result });
+                mails = result;
+            });
+        await db.sequelize.query(
+            `select count(id) as cnt from emails 
+            where isImportant = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') `, { type: db.Sequelize.QueryTypes.SELECT })
+            .then((result) => {
+                res.json({ data: mails, count: result[0].cnt });
             });
     }
     else if (category == 'starred') {
+        var mails;
         await db.sequelize.query(
-            `select * from emails where category = 0 and isStarred = 1`, { type: db.Sequelize.QueryTypes.SELECT })
+            `select * from emails 
+            where isStarred = 1  AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+            limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
-                res.json({ data: result });
+                mails = result;
+            });
+        await db.sequelize.query(
+            `select count(id) as cnt from emails 
+            where isStarred = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') `, { type: db.Sequelize.QueryTypes.SELECT })
+            .then((result) => {
+                res.json({ data: mails, count: result[0].cnt });
             });
     }
     else {
@@ -378,7 +412,8 @@ exports.sendemailById = async (req, res, next) => {
         subject: selected.subject,
         message: req.body.message,
         category: '1',
-        email: req.body.email
+        accept: req.body.email,
+        parentID: req.body.id,
     };
     console.log('param', params)
     Email.create(params)
@@ -421,7 +456,31 @@ exports.getLabels = async (req, res, next) => {
 
 exports.deleteEmailByID = async (req, res, next) => {
     await db.sequelize.query(`DELETE FROM emails WHERE id = '${req.body.id}' `)
-	res.send({ flag: "success" });
+    res.send({ flag: "success" });
 }
+
+exports.acceptEmailById = async (req, res, next) => {
+    const result = await Email.findOne({ where: { id: req.body.id } });
+    console.log('aaaaaa', result.accept)
+    if (result.accept) {
+        res.send({ flag: "accepted", data: result.accept })
+    }
+    else {
+        result.update({ accept: req.body.staff });
+        res.send({ flag: "success" })
+    }
+}
+
+exports.rejectEmailById = async (req, res, next) => {
+    const result = await Email.findOne({ where: { id: req.body.id } });
+    result.update({ accept: '' });
+    res.send({ flag: "success" })
+}
+
+exports.getRepliedEmailById = async (req, res, next) => {
+    var result = await db.sequelize.query(`SELECT * FROM emails WHERE parentID = '${req.body.id}' `, { type: db.Sequelize.QueryTypes.SELECT })
+    res.send({ result: result });
+}
+
 
 
