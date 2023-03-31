@@ -36,6 +36,7 @@ db.asset = require("./asset.js")(sequelize, Sequelize);
 db.team = require("./team.js")(sequelize, Sequelize);
 db.email = require("./email.js")(sequelize, Sequelize);
 db.setting = require("./setting.js")(sequelize, Sequelize);
+db.esetting = require("./esetting.js")(sequelize, Sequelize);
 
 module.exports = sequelize;
 module.exports = db;

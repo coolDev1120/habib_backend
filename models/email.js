@@ -50,6 +50,15 @@ module.exports = (sequelize, Sequelize) => {
     parentID: {
       type: Sequelize.INTEGER,
     },
+    inReplyTo: {
+      type: Sequelize.STRING,
+    },
+    messageId: {
+      type: Sequelize.STRING,
+    },
+    mainId: {
+      type: Sequelize.STRING,
+    },
   })
   return Email;
 };

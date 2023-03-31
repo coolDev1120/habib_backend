@@ -106,12 +106,18 @@ exports.signup = async function (req, res, next) {
 	}
 
 	const result = await User1.findOne({ where: { email: email } })
+	const result1 = await User1.findOne({ where: { username: req.body.username } })
 	if (result) {
 		return res.status(422).send({ error: 'Email is in use' });
 	}
+	else if (result1) {
+		return res.status(422).send({ error: 'Username is in use' });
+	}
 	else {
 		const user1 = {
-			username: req.body.name,
+			username: req.body.username,
+			firstname: req.body.firstName,
+			lastname: req.body.lastName,
 			email: email,
 			password: md5(password),
 			agent: req.body.agent,
@@ -145,6 +151,8 @@ exports.changePassword = async function (req, res, next) {
 exports.updateAccount = async function (req, res, next) {
 	var update = {
 		username: req.body.displayName,
+		firstname: req.body.firstName,
+		lastname: req.body.lastName,
 		image: req.body.image,
 	}
 	const result = await User1.findOne({ where: { email: req.body.email } });
@@ -185,12 +193,11 @@ exports.updateAccountById = async function (req, res, next) {
 	console.log(req.body)
 	var update = {
 		team: req.body.team,
-		username: req.body.username,
 		phone: req.body.phone,
 		accountype: req.body.accountype,
 		staff: req.body.staff,
 		dateAdded: req.body.dateAdded,
-		permissions: req.body.permissions,
+		role: req.body.role,
 	}
 	if (req.body.colourCode) {
 		update.colourCode = req.body.colourCode
