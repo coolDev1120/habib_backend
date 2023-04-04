@@ -54,6 +54,16 @@ router.post('/deletemail', Smtp2.deletemail)
 router.post('/getemailsByid', Smtp2.getemailsByid)
 router.post('/updatemailById', Smtp2.updatemailById)
 router.post('/mailAnalyse', Smtp2.mailAnalyse)
+router.post('/getservice', Smtp2.getservice)
+router.post('/changeEsettingById', Smtp2.changeEsettingById)
+router.post('/changeRoleById', Authentication.changeRoleById)
+router.post('/getHostings', Smtp2.getHostings)
+router.post('/addemailTeam', Smtp2.addemailTeam)
+router.post('/getemailTeam', Smtp2.getemailTeam)
+router.post('/getemailTeamByid', Smtp2.getemailTeamByid)
+router.post('/updatemailTeamById', Smtp2.updatemailTeamById)
+router.post('/deletemailTeam', Smtp2.deletemailTeam)
+router.post('/getEmailTeams', Smtp2.getEmailTeams)
 
 
 

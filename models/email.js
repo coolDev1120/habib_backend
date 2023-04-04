@@ -53,6 +53,12 @@ module.exports = (sequelize, Sequelize) => {
     inReplyTo: {
       type: Sequelize.STRING,
     },
+    acceptDate: {
+      type: Sequelize.DATE,
+    },
+    hostname: {
+      type: Sequelize.STRING,
+    },
     messageId: {
       type: Sequelize.STRING,
     },

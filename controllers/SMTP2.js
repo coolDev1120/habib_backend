@@ -4,20 +4,90 @@ const { simpleParser } = require('mailparser');
 var mIDs = [];
 var emails = [];
 const db = require("../models");
+const { param } = require('../router');
 const Email = db.email;
 const Esetting = db.esetting;
+const Email_teams = db.email_teams;
 
-getOne()
+basefunction()
 
 setInterval(() => {
     mIDs = []
     emails = []
-    getOne()
+    basefunction()
 }, 20000);
 
-async function getOne() {
-    const serverInfo = await Esetting.findOne({ where: { status: '1' } });
+// deleteMail()
 
+function deleteMail() {
+    const { inspect } = require('util');
+
+    const imap = new Imap({
+        user: process.env.MAIL_USER,
+        password: process.env.MAIL_PASSWORD,
+        host: process.env.MAIL_HOST,
+        port: 993,
+        tls: true,
+        tlsOptions: { rejectUnauthorized: false }
+    });
+
+    function openInbox(cb) {
+        imap.openBox('INBOX', true, cb);
+    }
+
+    imap.once('ready', function () {
+        openInbox(function (err, box) {
+            if (err) throw err;
+            imap.search(['ALL'], function (err, results) {
+                if (err) throw err;
+                const f = imap.seq.fetch(results, { bodies: '' });
+                f.on('message', function (msg, seqno) {
+                    console.log('Deleting message %d', seqno);
+                    const setFlags = imap.seq.setFlags(seqno, '\\Deleted');
+                });
+                f.on('end', function () {
+                    imap.expunge(function (err) {
+                        if (err) throw err;
+                        console.log('All messages deleted!');
+                        imap.end();
+                    });
+                });
+            });
+        });
+    });
+
+    imap.once('error', function (err) {
+        console.error(err);
+    });
+
+    imap.once('end', function () {
+        console.log('Connection ended');
+    });
+
+    imap.connect();
+
+}
+
+
+
+async function basefunction() {
+    const serverInfo =
+        await db.sequelize.query(`SELECT * FROM esettings a WHERE a.status = 1`, { type: db.Sequelize.QueryTypes.SELECT })
+
+    for (var i in serverInfo) {
+        if (i > 0) {
+            setTimeout(async () => {
+                await getOne(serverInfo[i])
+            }, 5000);
+        }
+        else (
+            await getOne(serverInfo[i])
+        )
+    }
+}
+
+async function getOne(serverInfo) {
+    // const serverInfo = await Esetting.findOne({ where: { status: '1' } });
     var imap = new Imap({
         user: serverInfo.email,
         password: serverInfo.password,
@@ -75,9 +145,9 @@ async function getOne() {
                         });
 
                         msg.once('attributes', function (attrs) {
-                            email.senderName = attrs.envelope.from[0].name;
+                            email.senderName = attrs.envelope.from ? attrs.envelope.from[0].name : '';
                             email.senderEmail = `${attrs.envelope.from[0].mailbox}@${attrs.envelope.from[0].host}`;
-                            email.receiverName = attrs.envelope.to[0].name;
+                            email.receiverName = attrs.envelope.to ? attrs.envelope.to[0].name : '';
                             email.receiverEmail = `${attrs.envelope.to[0].mailbox}@${attrs.envelope.to[0].host}`;
                             email.inReplyTo = attrs.envelope.inReplyTo;
                             email.messageId = attrs.envelope.messageId;
@@ -97,7 +167,7 @@ async function getOne() {
                     });
 
                     fetch.once('end', function () {
-                        getTwo()
+                        getTwo(serverInfo)
                         imap.end();
                     });
                 } else {
@@ -117,16 +187,18 @@ async function getOne() {
     });
 }
 
-function getTwo() {
+function getTwo(serverInfo) {
     var i = 0;
     const imapConfig = {
-        user: process.env.MAIL_USER,
-        password: process.env.MAIL_PASSWORD,
-        host: process.env.MAIL_HOST,
-        port: 993,
+        user: serverInfo.email,
+        password: serverInfo.password,
+        host: serverInfo.host,
+        port: serverInfo.imap,
         tls: true,
         tlsOptions: { rejectUnauthorized: false }
     };
+
+    console.log(imapConfig)
 
     const client = new imap(imapConfig);
 
@@ -153,6 +225,7 @@ function getTwo() {
                                 inReplyTo: emails[i].inReplyTo,
                                 messageId: emails[i].messageId,
                                 mainId: emails[i].messageId,
+                                hostname: serverInfo.email,
                                 category: 0
                             };
                             console.log(params)
@@ -188,7 +261,46 @@ function getTwo() {
 
 }
 
+exports.getservice = async (req, res, next) => {
+    var mails = [];
+    var search = req.body.search;
+    var total = ''
+    // if (mails % pageInfo.perpage > 0) {
+    //     countPage = Math.floor(mails / pageInfo.perpage) + 1;
+    // } else {
+    //     countPage = Math.floor(mails / pageInfo.perpage)
+    // }
+
+    await db.sequelize.query(
+        `SELECT e.* FROM emails e 
+            JOIN ( 
+                  SELECT mainId, MAX(createdAt) AS max_createdAt 
+                  FROM emails 
+                  WHERE category = 0  AND (fromName like '%${search}%' or accept like '%${search}%' or fromEmail like '%${search}%') 
+                  GROUP BY mainId 
+                ) subquery ON e.mainId = subquery.mainId AND e.createdAt = subquery.max_createdAt 
+            limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
+        .then((result) => {
+            mails = result;
+        });
+    await db.sequelize.query(
+        `select count(id) as cnt from (select * from emails 
+            where category = 0 AND (fromName like '%${search}%' or accept like '%${search}%' or fromEmail like '%${search}%')  group by mainId) as mm`, { type: db.Sequelize.QueryTypes.SELECT })
+        .then((result) => {
+            // res.json({ data: mails, count: result.length > 0 ? result[0].cnt : 0 });
+            total = result.length > 0 ? result[0].cnt : 0;
+        });
+    res.send({ data: mails, total: total })
+
+}
+
 exports.receiveEmail = async (req, res, next) => {
+    var serverInfo =
+        await db.sequelize.query(`SELECT b.* FROM users a, esettings b, email_teams c 
+                WHERE a.email = '${req.body.email}' AND a.team = c.id AND c.email = b.id`, { type: db.Sequelize.QueryTypes.SELECT })
+    serverInfo = serverInfo[0].email;
+
+
     var category = req.body.category;
     var search = req.body.search;
     var email = req.body.email;
@@ -200,7 +312,7 @@ exports.receiveEmail = async (req, res, next) => {
                 JOIN ( 
                       SELECT mainId, MAX(createdAt) AS max_createdAt 
                       FROM emails 
-                      WHERE category = 0 AND accept = '' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+                      WHERE hostname = '${serverInfo}' AND  category = 0 AND accept = '' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
                       GROUP BY mainId 
                     ) subquery ON e.mainId = subquery.mainId AND e.createdAt = subquery.max_createdAt 
                 limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
@@ -209,7 +321,7 @@ exports.receiveEmail = async (req, res, next) => {
             });
         await db.sequelize.query(
             `select count(id) as cnt from emails 
-            where category = 0 AND accept = '' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%')  group by mainId`, { type: db.Sequelize.QueryTypes.SELECT })
+            where hostname = '${serverInfo}' AND  category = 0 AND accept = '' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%')  group by mainId`, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
                 res.json({ data: mails, count: result.length > 0 ? result[0].cnt : 0 });
             });
@@ -221,7 +333,7 @@ exports.receiveEmail = async (req, res, next) => {
             JOIN ( 
                   SELECT mainId, MAX(createdAt) AS max_createdAt 
                   FROM emails 
-                  WHERE category = 0 AND accept = '${email}' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+                  WHERE hostname = '${serverInfo}' AND  category = 0 AND accept = '${email}' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
                   GROUP BY mainId 
                 ) subquery ON e.mainId = subquery.mainId AND e.createdAt = subquery.max_createdAt 
             limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
@@ -230,7 +342,7 @@ exports.receiveEmail = async (req, res, next) => {
             });
         await db.sequelize.query(
             `select count(id) as cnt from emails 
-            where category = 0 AND accept = '${req.body.email}' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId`, { type: db.Sequelize.QueryTypes.SELECT })
+            where hostname = '${serverInfo}' AND  category = 0 AND accept = '${req.body.email}' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId`, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
                 res.json({ data: mails, count: result.length > 0 ? result[0].cnt : 0 });
             });
@@ -241,7 +353,7 @@ exports.receiveEmail = async (req, res, next) => {
             JOIN ( 
                   SELECT mainId, MAX(createdAt) AS max_createdAt 
                   FROM emails 
-                  WHERE category = 1 AND accept = '${email}' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+                  WHERE hostname = '${serverInfo}' AND  category = 1 AND accept = '${email}' AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
                   GROUP BY mainId 
                 ) subquery ON e.mainId = subquery.mainId AND e.createdAt = subquery.max_createdAt 
             limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
@@ -250,7 +362,7 @@ exports.receiveEmail = async (req, res, next) => {
             });
         await db.sequelize.query(
             `select count(id) as cnt from emails 
-            where category = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId `, { type: db.Sequelize.QueryTypes.SELECT })
+            where hostname = '${serverInfo}' AND  category = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId `, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
                 res.json({ data: mails, count: result.length > 0 ? result[0].cnt : 0 });
             });
@@ -270,7 +382,7 @@ exports.receiveEmail = async (req, res, next) => {
                 JOIN ( 
                       SELECT mainId, MAX(createdAt) AS max_createdAt 
                       FROM emails 
-                      WHERE isImportant = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+                      WHERE hostname = '${serverInfo}' AND  isImportant = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
                       GROUP BY mainId 
                     ) subquery ON e.mainId = subquery.mainId AND e.createdAt = subquery.max_createdAt 
                 limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
@@ -279,7 +391,7 @@ exports.receiveEmail = async (req, res, next) => {
             });
         await db.sequelize.query(
             `select count(id) as cnt from emails 
-            where isImportant = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId  `, { type: db.Sequelize.QueryTypes.SELECT })
+            where hostname = '${serverInfo}' AND  isImportant = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId  `, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
                 res.json({ data: mails, count: result.length > 0 ? result[0].cnt : 0 });
             });
@@ -291,7 +403,7 @@ exports.receiveEmail = async (req, res, next) => {
                     JOIN ( 
                           SELECT mainId, MAX(createdAt) AS max_createdAt 
                           FROM emails 
-                          WHERE isStarred = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
+                          WHERE hostname = '${serverInfo}' AND  isStarred = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') 
                           GROUP BY mainId 
                         ) subquery ON e.mainId = subquery.mainId AND e.createdAt = subquery.max_createdAt 
                     limit ${(req.body.page - 1) * req.body.perpage}, ${req.body.perpage}`, { type: db.Sequelize.QueryTypes.SELECT })
@@ -300,7 +412,7 @@ exports.receiveEmail = async (req, res, next) => {
             });
         await db.sequelize.query(
             `select count(id) as cnt from emails 
-            where isStarred = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId `, { type: db.Sequelize.QueryTypes.SELECT })
+            where hostname = '${serverInfo}' AND  isStarred = 1 AND (subject like '%${search}%' or message like '%${search}%' or fromEmail like '%${search}%') group by mainId `, { type: db.Sequelize.QueryTypes.SELECT })
             .then((result) => {
                 res.json({ data: mails, count: result.length > 0 ? result[0].cnt : 0 });
             });
@@ -420,23 +532,66 @@ exports.deleteEmailByID = async (req, res, next) => {
 exports.acceptEmailById = async (req, res, next) => {
     const result = await Email.findOne({ where: { id: req.body.id } });
     console.log('aaaaaa', result.accept)
-    if (result.accept) {
-        res.send({ flag: "accepted", data: result.accept })
-    }
-    else {
-        result.update({ accept: req.body.staff });
-        res.send({ flag: "success" })
-    }
+    // if (result.accept) {
+    //     res.send({ flag: "accepted", data: result.accept })
+    // }
+    // else {
+    result.update({ accept: req.body.staff, acceptDate: new Date() });
+    res.send({ flag: "success" })
+    // }
 }
 
 exports.rejectEmailById = async (req, res, next) => {
     const result = await Email.findOne({ where: { id: req.body.id } });
-    result.update({ accept: '' });
+    result.update({ accept: '', acceptDate: '' });
     res.send({ flag: "success" })
 }
 
+// Email Teama
+exports.addemailTeam = async (req, res, next) => {
+    var params = req.body;
+    Email_teams.create(params)
+    res.send({ flag: "success" })
+}
+
+exports.getemailTeam = async function (req, res, next) {
+    const result = await Email_teams.findAll();
+    res.send({ result: result })
+}
+
+exports.getemailTeamByid = async function (req, res, next) {
+    const result = await Email_teams.findOne({ where: { id: req.body.id } });
+    res.send({ result: result })
+}
+
+exports.updatemailTeamById = async function (req, res, next) {
+    var params = req.body;
+    const result = await Email_teams.findOne({ where: { id: req.body.id } });
+    console.log(params)
+    result.update(params);
+    res.send({ flag: "success" })
+}
+
+exports.deletemailTeam = async function (req, res, next) {
+    await db.sequelize.query(`DELETE FROM email_teams WHERE id = '${req.body.id}' `)
+    res.send({ flag: "success" });
+}
+
+exports.getEmailTeams = async function (req, res, next) {
+    const result = await Email_teams.findAll();
+    res.send({ result: result })
+}
 
 // Esetting
+exports.changeEsettingById = async (req, res, next) => {
+    // if (req.body.val === '1') {
+    //     await db.sequelize.query(`UPDATE esettings SET status = 0`)
+    // }
+    const result = await Esetting.findOne({ where: { id: req.body.id } });
+    result.update({ status: req.body.val });
+    res.send({ flag: "success" })
+}
+
 exports.addemail = async (req, res, next) => {
     if (req.body.status === '1') {
         await db.sequelize.query(`UPDATE esettings SET status = 0`)
@@ -469,21 +624,34 @@ exports.getemailsByid = async function (req, res, next) {
 }
 
 exports.updatemailById = async function (req, res, next) {
-    var params = req.body;
-    await db.sequelize.query(`UPDATE esettings SET status = 0`)
+    // var params = req.body;
+    // await db.sequelize.query(`UPDATE esettings SET status = 0`)
 
     const result = await Esetting.findOne({ where: { email: req.body.email } });
     console.log(params)
     result.update(params);
     res.send({ flag: "success" })
 }
-// End Esetting
-exports.getRepliedEmailById = async (req, res, next) => {
-    const main = await Email.findOne({ where: { id: req.body.id } });
-    var result = await db.sequelize.query(`SELECT * FROM emails WHERE mainId = '${main.mainId}' `, { type: db.Sequelize.QueryTypes.SELECT })
+
+exports.getHostings = async (req, res, next) => {
+    const result = await Esetting.findAll();
     res.send({ result: result });
 }
 
+// End Esetting
+exports.getRepliedEmailById = async (req, res, next) => {
+    const main = await Email.findOne({ where: { id: req.body.id } });
+    var result;
+    var flag;
+    if (main.accept) {
+        flag = true
+        result = await db.sequelize.query(`SELECT a.*, b.username FROM emails a, users b WHERE a.accept = b.email AND a.mainId = '${main.mainId}' `, { type: db.Sequelize.QueryTypes.SELECT })
+    } else {
+        flag = false
+        result = await db.sequelize.query(`SELECT * FROM emails WHERE mainId = '${main.mainId}' `, { type: db.Sequelize.QueryTypes.SELECT })
+    }
+    res.send({ result: result, flag: flag });
+}
 
 exports.mailAnalyse = async (req, res, next) => {
     var reply = await db.sequelize.query(`SELECT COUNT(id) AS cnt, DATE(createdAt) AS dd FROM emails 

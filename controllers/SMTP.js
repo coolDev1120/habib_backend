@@ -4,10 +4,16 @@ const Email = db.email;
 const Esetting = db.esetting;
 
 exports.sendEmail = async (req, res, next) => {
-    const serverInfo = await Esetting.findOne({ where: { status: '1' } });
+    var serverInfo =
+        await db.sequelize.query(`SELECT b.* FROM users a, esettings b, email_teams c 
+                WHERE a.email = '${req.body.email}' AND a.team = c.id AND c.email = b.id`, { type: db.Sequelize.QueryTypes.SELECT })
+    serverInfo = serverInfo[0];
 
     var mailOptions = {
-        from: serverInfo.email,
+        from: {
+            name: req.body.senderName,
+            address: serverInfo.email,
+        },
         to: req.body.receiver,
         subject: req.body.subject,
         inReplyTo: req.body.inReplyTo,
@@ -39,7 +45,7 @@ exports.sendEmail = async (req, res, next) => {
             var selected = {}
             var selected = await Email.findOne({ where: { id: req.body.id } });
             var params = {
-                fromName: "Admin",
+                fromName: req.body.senderName,
                 fromEmail: selected.toEmail,
                 toName: selected.fromName,
                 toEmail: selected.fromEmail,
@@ -51,6 +57,7 @@ exports.sendEmail = async (req, res, next) => {
                 inReplyTo: selected.messageId,
                 messageId: info.messageId,
                 mainId: selected.mainId,
+                hostname: selected.hostname,
             };
             console.log('param', params)
             await Email.create(params)
@@ -61,16 +68,20 @@ exports.sendEmail = async (req, res, next) => {
             });
         }
     });
-
-
 }
 
 
 exports.sendEmail0 = async (req, res, next) => {
-    const serverInfo = await Esetting.findOne({ where: { status: '1' } });
+    var serverInfo =
+        await db.sequelize.query(`SELECT b.* FROM users a, esettings b, email_teams c 
+                WHERE a.email = '${req.body.email}' AND a.team = c.id AND c.email = b.id`, { type: db.Sequelize.QueryTypes.SELECT })
+    serverInfo = serverInfo[0];
 
     var mailOptions = {
-        from: serverInfo.email,
+        from: {
+            name: req.body.senderName,
+            address: serverInfo.email,
+        },
         to: req.body.receiver,
         subject: req.body.subject,
         inReplyTo: req.body.inReplyTo,
@@ -100,7 +111,7 @@ exports.sendEmail0 = async (req, res, next) => {
             return;
         } else {
             var params = {
-                fromName: "Admin",
+                fromName: req.body.senderName,
                 fromEmail: serverInfo.email,
                 toName: '',
                 toEmail: req.body.receiver,
@@ -110,6 +121,7 @@ exports.sendEmail0 = async (req, res, next) => {
                 accept: req.body.email,
                 messageId: info.messageId,
                 mainId: info.messageId,
+                hostname: serverInfo.email,
             };
             console.log('param', params)
             await Email.create(params)

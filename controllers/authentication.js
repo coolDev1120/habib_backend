@@ -162,10 +162,14 @@ exports.updateAccount = async function (req, res, next) {
 
 exports.addaccount = async function (req, res, next) {
 	const result = await User1.findOne({ where: { email: req.body.email } })
+	const result1 = await User1.findOne({ where: { username: req.body.username } })
 	var update = req.body;
 	update.password = md5(update.password)
 	if (result) {
 		return res.send({ flag: 'failed', message: 'Email is in use' });
+	}
+	else if (result1) {
+		return res.send({ flag: 'failed', message: 'Usernames is in use' });
 	}
 	else {
 		await User1.create(update)
@@ -192,6 +196,7 @@ exports.getAccountById = async function (req, res, next) {
 exports.updateAccountById = async function (req, res, next) {
 	console.log(req.body)
 	var update = {
+		username: req.body.username,
 		team: req.body.team,
 		phone: req.body.phone,
 		accountype: req.body.accountype,
@@ -205,8 +210,20 @@ exports.updateAccountById = async function (req, res, next) {
 	if (req.body.password) {
 		update.password = md5(req.body.password)
 	}
-	const result = await User1.findOne({ where: { email: req.body.email } });
-	result.update(update);
-	res.send({ flag: "success" })
+	const result1 = await User1.findOne({ where: { username: req.body.username } })
+	// if (result1) {
+	// 	return res.send({ flag: 'failed', message: 'Usernames is in use' });
+	// }
+	// else {
+		const result = await User1.findOne({ where: { email: req.body.email } });
+		result.update(update);
+		res.send({ flag: "success" })
+	// }
+}
+
+exports.changeRoleById = async (req, res, next) => {
+    const result = await User1.findOne({ where: { id: req.body.id } });
+    result.update({ role: req.body.val });
+    res.send({ flag: "success" })
 }
 
