@@ -68,7 +68,64 @@ function deleteMail() {
 
 }
 
+function revieceFile() {
+    const Imap = require('imap');
+    const simpleParser = require('mailparser').simpleParser;
 
+    const imap = new Imap({
+        user: process.env.MAIL_USER,
+        password: process.env.MAIL_PASSWORD,
+        host: process.env.MAIL_HOST,
+        port: 993,
+        tls: true,
+        tlsOptions: { rejectUnauthorized: false }
+    });
+
+    function openInbox(cb) {
+        imap.openBox('INBOX', true, cb);
+    }
+
+    imap.once('ready', () => {
+        openInbox((err, box) => {
+            if (err) throw err;
+            imap.search(['ALL'], (err, results) => {
+                if (err) throw err;
+                const f = imap.fetch(results, { bodies: '' });
+                f.on('message', (msg, seqno) => {
+                    msg.on('body', (stream, info) => {
+                        simpleParser(stream, (err, parsed) => {
+                            if (err) throw err;
+                            if (parsed.attachments.length > 0) {
+                                // Handle attachments
+                                parsed.attachments.forEach((attachment) => {
+                                    console.log(`Received attachment: ${attachment.filename}`);
+                                });
+                            }
+                        });
+                    });
+                });
+                f.once('error', (err) => {
+                    console.log(`Fetch error: ${err}`);
+                });
+                f.once('end', () => {
+                    console.log('Done fetching all messages!');
+                    imap.end();
+                });
+            });
+        });
+    });
+
+    imap.once('error', (err) => {
+        console.log(`IMAP error: ${err}`);
+    });
+
+    imap.once('end', () => {
+        console.log('IMAP connection ended.');
+    });
+
+    imap.connect();
+
+}
 
 async function basefunction() {
     const serverInfo =
